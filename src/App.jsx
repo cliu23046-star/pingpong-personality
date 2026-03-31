@@ -1,408 +1,856 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useMemo, useCallback } from "react";
 
-var DIMENSIONS = [
-  { key: 'attack', name: '攻防倾向', icon: '⚔️', low: '防守型', high: '进攻型', desc: '你在比赛中的进攻/防守偏好' },
-  { key: 'flexibility', name: '战术弹性', icon: '🔄', low: '体系执行', high: '灵活多变', desc: '面对变化时的调整能力' },
-  { key: 'pressure', name: '压力应对', icon: '🧠', low: '压力敏感', high: '大心脏', desc: '关键时刻的心理素质' },
-  { key: 'rhythm', name: '节奏控制', icon: '⏱️', low: '慢节奏控制', high: '快节奏抢攻', desc: '你偏好的比赛节奏' },
-  { key: 'serve', name: '发球策略', icon: '🎯', low: '稳健保守', high: '变化多端', desc: '发球的主动性和变化性' },
-  { key: 'receive', name: '接发球策略', icon: '🛡️', low: '保守过渡', high: '积极抢攻', desc: '接发球时的主动性' },
-  { key: 'hand', name: '正反手偏好', icon: '✋', low: '反手主导', high: '正手主导', desc: '比赛中正反手的使用偏好' },
-];
+const C = {
+  teal: { bg: "#E1F5EE", tx: "#085041", mid: "#1D9E75" },
+  blue: { bg: "#E6F1FB", tx: "#0C447C", mid: "#378ADD" },
+  coral: { bg: "#FAECE7", tx: "#712B13", mid: "#D85A30" },
+  purple: { bg: "#EEEDFE", tx: "#3C3489", mid: "#534AB7" },
+  amber: { bg: "#FAEEDA", tx: "#633806", mid: "#BA7517" },
+  pink: { bg: "#FBEAF0", tx: "#72243E", mid: "#D4537E" },
+  gray: { bg: "#F1EFE8", tx: "#444441", mid: "#888780" },
+  red: { bg: "#FCEBEB", tx: "#791F1F", mid: "#E24B4A" },
+  green: { bg: "#EAF3DE", tx: "#27500A", mid: "#639922" },
+};
+const fmt = n => (n < 0 ? "-" : "") + "¥" + Math.abs(Math.round(n)).toLocaleString();
+const pct = n => Math.round(n * 100) + "%";
+const MONTHS = ["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"];
 
-var QUESTIONS = [
-  // === 攻防倾向 ===
-  { dim: 'attack', text: '比分来到9:9，你发球后对手回了一个半高球，你会：',
-    options: ['轻拉一板到对手反手位，先稳住', '中等力量拉到对手空档', '直接发力冲，争取一板解决'] },
-  { dim: 'attack', text: '对手防守很好，你连续拉了三板都没得分，你会：',
-    options: ['改为控制落点，和对手慢慢磨', '继续进攻但改变线路和节奏', '加大力量，用更大的力量突破'] },
-  { dim: 'attack', text: '相持中双方已经拉了五六板，你心里想的是：',
-    options: ['安全回球保证不失误', '找机会变线或加速打空档', '必须结束了，找机会发力冲死'] },
-  { dim: 'attack', text: '你领先7:4，对手开始拼命进攻，你会：',
-    options: ['稳住节奏，防守为主，等对手失误', '有机会就反击，没机会就防守', '主动对攻，不给对手节奏'] },
-  { dim: 'attack', text: '描述你平时赢球的主要方式：',
-    options: ['对手失误和我的稳定性', '主动进攻和对手失误各占一半', '绝大多数靠我主动进攻得分'] },
-  { dim: 'attack', text: '如果用一个词形容你的打法风格：',
-    options: ['稳健，让对手犯错', '攻守兼备，伺机而动', '冶炼进攻，压制对手'] },
-
-  // === 战术弹性 ===
-  { dim: 'flexibility', text: '对手是你没见过的长胶打法，开局连丢三分，你会：',
-    options: ['坚持自己的打法，相信适应后会好', '尝试调整一两个战术细节', '完全改变打法，试不同的套路'] },
-  { dim: 'flexibility', text: '你发现对手反手位明显弱，但你自己最擅长正手对拉时，你会：',
-    options: ['继续打我最擅长的线路', '主要攻弱点，偶尔变化', '立刻改变策略，专攻弱点'] },
-  { dim: 'flexibility', text: '比赛中你已经用同一套发球战术赢了前两局，第三局对手适应了，你会：',
-    options: ['继续用，相信执行质量更重要', '微调落点和旋转变化', '完全换一套新的发球组合'] },
-  { dim: 'flexibility', text: '暂停时教练/队友给你建议改变打法，你会：',
-    options: ['听但还是按自己习惯打', '尝试融入部分建议', '积极采纳，马上调整'] },
-  { dim: 'flexibility', text: '你更认同哪种训练理念？',
-    options: ['把一招练到极致比什么都重要', '有核心技术，也要有备用方案', '会的越多越好，能应对各种对手'] },
-
-  // === 压力应对 ===
-  { dim: 'pressure', text: '决胜局9:9，你发球，你心里的状态是：',
-    options: ['心跳加速，手有点紧，希望快点结束', '有点紧张但能控制，按计划打', '兴奋，这就是我的舒适区'] },
-  { dim: 'pressure', text: '比赛时旁边站了很多观众，你的反应是：',
-    options: ['明显紧张，发挥不出平时水平', '有点影响但基本能正常发挥', '喜欢被关注的感觉，越打越兴奋'] },
-  { dim: 'pressure', text: '局分0:2落后，你的心态是：',
-    options: ['基本放弃了，尽力打完', '还有机会，一局一局来', '太好了，最喜欢逆风局，放开打'] },
-  { dim: 'pressure', text: '裁判明显误判了一个擦边球，你丢了关键一分，你会：',
-    options: ['很难平复，接下来几个球都受影响', '有点郁闷但能强迫自己专注', '快速翻篇，下一分就忘了'] },
-  { dim: 'pressure', text: '你在大比分2:1领先第四局被对手连追5分，从7:3领先变成7:8，你会：',
-    options: ['开始怀疑自己，动作越来越保守', '叫暂停调整，重新组织', '告诉自己忘掉比分，专注打好每一分'] },
-
-  // === 节奏控制 ===
-  { dim: 'rhythm', text: '你发球前的习惯是：',
-    options: ['慢慢准备，想好战术再发', '正常节奏，不快不慢', '拿到球就发，保持节奏连贯'] },
-  { dim: 'rhythm', text: '对手慢悠悠擦汗、系鞋带，打断了你的节奏，你会：',
-    options: ['无所谓，我也休息一下调整思路', '有点不爽但能调整', '很急躁，希望快点继续'] },
-  { dim: 'rhythm', text: '你更享受哪种回合？',
-    options: ['多拍相持，双方轮番攻防的拉锯战', '都可以，看情况', '前三板解决战斗，干净利落'] },
-  { dim: 'rhythm', text: '你连赢三分后，你会：',
-    options: ['放慢节奏，稳住优势', '保持现有节奏', '加快节奏，乘胜追击'] },
-  { dim: 'rhythm', text: '如果用"慢→快"的尺度衡量你的打法：',
-    options: ['偏慢，我喜欢掌控节奏', '中等，快慢都行', '偏快，慢下来反而不舒服'] },
-
-  // === 发球策略 ===
-  { dim: 'serve', text: '关键分你发球时会：',
-    options: ['用最有把握的发球，确保不失误', '用练得最好的发球，但加点变化', '反而发对手没见过的发球，出其不意'] },
-  { dim: 'serve', text: '你平时练发球的方式是：',
-    options: ['反复练两三种最常用的，追求稳定', '练四五种，有主有次', '各种发球都练，喜欢研究新发球'] },
-  { dim: 'serve', text: '对手连续两个接发球抢攻得分时，你会：',
-    options: ['换一种更安全的发球', '改变落点或旋转', '完全换一套发球组合和第三板套路'] },
-  { dim: 'serve', text: '你的发球种类大概有：',
-    options: ['2-3种常用发球', '4-5种，有明确的组合套路', '6种以上，并且都会在比赛中使用'] },
-  { dim: 'serve', text: '你觉得发球最重要的是：',
-    options: ['不失误，先把球发上台', '配合第三板套路', '直接通过发球创造机会或得分'] },
-
-  // === 接发球策略 ===
-  { dim: 'receive', text: '对手发了一个你看不清旋转的短球，你会：',
-    options: ['先搓一板过渡，看清再说', '搓长或摆短，控制落点', '直接拧拉/挑打，先上手'] },
-  { dim: 'receive', text: '对手发了一个急长球到你反手位，你会：',
-    options: ['被动起板或者搓一个保证上台', '反手主动摩擦起板', '侧身发力起板'] },
-  { dim: 'receive', text: '对手发球很好，你连续三个接发球失误，你会：',
-    options: ['更保守，先确保接回去', '调整站位和判断，继续积极接', '坚持抢攻，不能让对手舒服地衔接'] },
-  { dim: 'receive', text: '你接发球时的主要目标是：',
-    options: ['安全回球，不给对手机会', '控制落点，限制对手第三板', '主动抢攻，争取先上手'] },
-  { dim: 'receive', text: '对手发了一个短下旋到你正手位，你会：',
-    options: ['轻搓回对手反手位，保证不失误', '加转摆短或劈长，控制落点', '直接拧拉/挑打上手'] },
-
-  // === 正反手偏好 ===
-  { dim: 'hand', text: '相持中球来到中间位置，正反手都能够到，你会：',
-    options: ['习惯性用反手处理', '看情况，哪边顺手用哪边', '侧身用正手拉'] },
-  { dim: 'hand', text: '你觉得自己最有威胁的技术是：',
-    options: ['反手拉/弹或反手拧拉', '正反手差不多', '正手拉球或正手冲球'] },
-  { dim: 'hand', text: '练球时你花更多时间练什么？',
-    options: ['反手技术练得更多', '正反手差不多', '正手技术练得更多'] },
-  { dim: 'hand', text: '对手攻你中路追身，你的第一反应是：',
-    options: ['用反手快带一板', '看来球方向再决定', '侧身让开用正手'] },
-  { dim: 'hand', text: '如果只能选一项加强，你会选：',
-    options: ['提升反手质量', '提升正反手转换衔接', '提升正手质量'] },
-];
-
-var LABELS_3 = ['A', 'B', 'C'];
-
-var ARCHETYPES = [
-  { id: 'berserker', name: '狂战士', emoji: '🔥', subtitle: '进攻就是最好的防守',
-    check: function(s) { return s.attack >= 60 && s.rhythm >= 60; },
-    summary: '你是球场上的狂战士，追求极致的进攻速度和压迫力。' },
-  { id: 'tactician', name: '兵法大师', emoji: '🧠', subtitle: '每一分都是算计好的',
-    check: function(s) { return s.flexibility >= 60 && s.serve >= 60; },
-    summary: '你善于阅读比赛、调整战术，用变化多端的策略让对手永远猜不透。' },
-  { id: 'clutch', name: '关键先生', emoji: '🏆', subtitle: '越到关键时刻越强',
-    check: function(s) { return s.pressure >= 60 && s.attack >= 50; },
-    summary: '你在压力下反而能爆发出更强的战斗力，关键时刻是你的舞台。' },
-  { id: 'wall', name: '铜墙铁壁', emoji: '🧱', subtitle: '你永远不会主动输',
-    check: function(s) { return s.attack < 40 && s.pressure >= 50; },
-    summary: '你的防守极其稳定，心理素质过硬，能把比赛拖入你擅长的节奏。' },
-  { id: 'controller', name: '节奏大师', emoji: '🎵', subtitle: '比赛的节奏由我定',
-    check: function(s) { return s.rhythm < 40 && s.flexibility >= 50; },
-    summary: '你擅长用节奏变化和战术调整控制比赛走向。' },
-  { id: 'allrounder', name: '全能战士', emoji: '⭐', subtitle: '各项均衡，没有明显短板',
-    check: function(s) {
-      var vals = [s.attack, s.flexibility, s.pressure, s.rhythm, s.serve, s.receive];
-      var mn = Math.min.apply(null, vals); var mx = Math.max.apply(null, vals);
-      return mx - mn < 25 && mn >= 35;
-    },
-    summary: '你在各个维度上都没有明显短板，能适应各种对手和场景。' },
-  { id: 'default', name: '复合型选手', emoji: '🏓', subtitle: '独特的风格组合',
-    check: function() { return true; },
-    summary: '你的比赛风格是多种特质的独特组合，在不同场景下会展现不同的面貌。' },
-];
-
-function getArchetype(scores) {
-  for (var i = 0; i < ARCHETYPES.length; i++) { if (ARCHETYPES[i].check(scores)) return ARCHETYPES[i]; }
-  return ARCHETYPES[ARCHETYPES.length - 1];
-}
-
-function shuffleArray(arr) {
-  var a = arr.map(function(q, i) { return Object.assign({}, q, { origIndex: i }); });
-  for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; }
-  return a;
-}
-
-function RadarChart(props) {
-  var scores = props.scores;
-  var w = 500, h = 420;
-  var cx = w / 2, cy = h / 2, rr = 100;
-  var n = DIMENSIONS.length;
-  var step = (2 * Math.PI) / n, start = -Math.PI / 2;
-  function gp(i, v) { var a = start + i * step; var d = (v / 100) * rr; return [cx + d * Math.cos(a), cy + d * Math.sin(a)]; }
-  var grid = [20, 40, 60, 80, 100];
-  var dp = DIMENSIONS.map(function(d, i) { return gp(i, scores[d.key] || 0); });
-  var poly = dp.map(function(p) { return p.join(','); }).join(' ');
-  var lpos = [
-    { x: cx, y: 18, a: 'middle' },
-    { x: cx + rr + 60, y: cy - rr * 0.55, a: 'start' },
-    { x: cx + rr + 60, y: cy + rr * 0.2, a: 'start' },
-    { x: cx + rr * 0.3, y: cy + rr + 35, a: 'start' },
-    { x: cx - rr * 0.3, y: cy + rr + 35, a: 'end' },
-    { x: cx - rr - 60, y: cy + rr * 0.2, a: 'end' },
-    { x: cx - rr - 60, y: cy - rr * 0.55, a: 'end' },
-  ];
+// ===== SHARED COMPONENTS =====
+function Sec({ title, sub, right, children }) {
   return (
-    <svg viewBox={'0 0 ' + w + ' ' + h} style={{ width: '100%', maxWidth: w }}>
-      {grid.map(function(l) { var pts = DIMENSIONS.map(function(_, i) { return gp(i, l).join(','); }).join(' '); return <polygon key={l} points={pts} fill="none" stroke="#e5e7eb" strokeWidth="1" />; })}
-      {DIMENSIONS.map(function(_, i) { var p = gp(i, 100); return <line key={i} x1={cx} y1={cy} x2={p[0]} y2={p[1]} stroke="#e5e7eb" strokeWidth="1" />; })}
-      <polygon points={poly} fill="rgba(59,130,246,0.2)" stroke="#3b82f6" strokeWidth="2.5" />
-      {dp.map(function(p, i) { return <circle key={i} cx={p[0]} cy={p[1]} r="4" fill="#3b82f6" />; })}
-      {DIMENSIONS.map(function(d, i) { var l = lpos[i]; return <text key={i} x={l.x} y={l.y} textAnchor={l.a} dominantBaseline="central" style={{ fontSize: 12, fontWeight: 600, fill: '#374151' }}>{d.icon + ' ' + d.name}</text>; })}
-      {dp.map(function(p, i) { var v = scores[DIMENSIONS[i].key] || 0; return <text key={'v' + i} x={p[0]} y={p[1] - 14} textAnchor="middle" style={{ fontSize: 11, fontWeight: 700, fill: '#3b82f6' }}>{Math.round(v)}</text>; })}
-    </svg>
-  );
-}
-
-function ProgressBar(props) {
-  return (
-    <div style={{ width: '100%', height: 8, background: '#e5e7eb', borderRadius: 4, overflow: 'hidden' }}>
-      <div style={{ width: props.value + '%', height: '100%', background: props.color || '#3b82f6', borderRadius: 4, transition: 'width 0.6s ease' }} />
-    </div>
-  );
-}
-
-var dimColors = ['#3b82f6', '#8b5cf6', '#f59e0b', '#10b981', '#ef4444', '#6366f1', '#ec4899'];
-
-var SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
-var SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-
-function submitRating(payload) {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) { console.log('[Demo]', payload); return Promise.resolve({ ok: true }); }
-  return fetch(SUPABASE_URL + '/rest/v1/ratings', { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY, 'Prefer': 'return=minimal' }, body: JSON.stringify(payload) });
-}
-
-function RatingWidget(props) {
-  var _r1 = useState(0), rating = _r1[0], setRating = _r1[1];
-  var _r2 = useState(0), hover = _r2[0], setHover = _r2[1];
-  var _r3 = useState('idle'), status = _r3[0], setStatus = _r3[1];
-  var _r4 = useState(''), feedback = _r4[0], setFeedback = _r4[1];
-  function handleSubmit() {
-    if (!rating) return; setStatus('submitting');
-    submitRating({ rating: rating, feedback: feedback || null, archetype: props.archetype.id, scores: JSON.stringify(props.scores), profile: JSON.stringify(props.profile), created_at: new Date().toISOString() })
-      .then(function() { setStatus('done'); })['catch'](function() { setStatus('done'); });
-  }
-  if (status === 'done') return <div style={{ background: '#f0fdf4', borderRadius: 14, padding: 20, marginBottom: 20, border: '1px solid #bbf7d0', textAlign: 'center' }}><div style={{ fontSize: 28, marginBottom: 8 }}>✅</div><p style={{ fontSize: 14, fontWeight: 600, color: '#166534', margin: 0 }}>感谢反馈！</p></div>;
-  var stars = [1, 2, 3, 4, 5]; var sl = ['完全不准', '不太准', '一般', '比较准', '非常准'];
-  return (
-    <div style={{ background: '#fefce8', borderRadius: 14, padding: 20, marginBottom: 20, border: '1px solid #fde68a' }}>
-      <h3 style={{ fontSize: 15, fontWeight: 700, color: '#92400e', margin: '0 0 6px' }}>⭐ 你觉得这个结果准不准？</h3>
-      <p style={{ fontSize: 13, color: '#a16207', margin: '0 0 14px' }}>你的评分将帮助我们优化测试</p>
-      <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 8 }}>
-        {stars.map(function(s) { var ac = s <= (hover || rating); return <button key={s} onMouseEnter={function() { setHover(s); }} onMouseLeave={function() { setHover(0); }} onClick={function() { setRating(s); }} style={{ fontSize: 32, background: 'none', border: 'none', cursor: 'pointer', transform: ac ? 'scale(1.15)' : 'scale(1)', transition: 'transform 0.15s', filter: ac ? 'none' : 'grayscale(1) opacity(0.4)' }}>⭐</button>; })}
+    <div style={{ marginBottom: 24 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: sub ? 2 : 10, paddingBottom: 6, borderBottom: "1px solid #eee" }}>
+        <span style={{ fontSize: 15, fontWeight: 500 }}>{title}</span>
+        {right}
       </div>
-      {rating > 0 && <div style={{ textAlign: 'center', marginBottom: 12 }}><span style={{ fontSize: 13, fontWeight: 600, color: '#92400e' }}>{sl[rating - 1]}</span></div>}
-      {rating > 0 && <div>
-        <textarea value={feedback} onChange={function(e) { setFeedback(e.target.value); }} placeholder="可选：告诉我们哪里不准或有什么建议..." style={{ width: '100%', minHeight: 60, padding: 12, fontSize: 13, border: '1px solid #fde68a', borderRadius: 10, resize: 'vertical', fontFamily: 'inherit', background: '#fffef5', boxSizing: 'border-box' }} />
-        <button onClick={handleSubmit} disabled={status === 'submitting'} style={{ width: '100%', marginTop: 10, padding: '12px 0', fontSize: 14, fontWeight: 700, background: status === 'submitting' ? '#d1d5db' : '#f59e0b', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer' }}>{status === 'submitting' ? '提交中...' : '提交评分'}</button>
-      </div>}
+      {sub && <div style={{ fontSize: 12, color: "#888", marginBottom: 10 }}>{sub}</div>}
+      {children}
+    </div>
+  );
+}
+function G({ cols = 2, children }) {
+  return <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(0,1fr))`, gap: 10 }}>{children}</div>;
+}
+function Metric({ label, value, color, sub }) {
+  return (
+    <div style={{ background: "#f5f5f0", borderRadius: 8, padding: "10px 12px" }}>
+      <div style={{ fontSize: 12, color: "#888", marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 18, fontWeight: 500, color: color || "inherit" }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: "#aaa", marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+}
+function Sl({ label, value, onChange, min, max, step = 1, suffix = "" }) {
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
+        <span style={{ color: "#888" }}>{label}</span>
+        <span style={{ fontWeight: 500 }}>{value}{suffix}</span>
+      </div>
+      <input type="range" min={min} max={max} step={step} value={value} onChange={e => onChange(+e.target.value)} style={{ width: "100%" }} />
+    </div>
+  );
+}
+function Inp({ label, value, onChange, placeholder, prefix, suffix, type = "number" }) {
+  return (
+    <div style={{ marginBottom: 8 }}>
+      {label && <div style={{ fontSize: 12, color: "#888", marginBottom: 3 }}>{label}</div>}
+      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        {prefix && <span style={{ fontSize: 13, color: "#888" }}>{prefix}</span>}
+        <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder || ""} style={{ width: "100%", fontSize: 14, padding: "6px 8px", borderRadius: 6, border: "1px solid #ddd", background: "transparent", color: "inherit" }} />
+        {suffix && <span style={{ fontSize: 13, color: "#888" }}>{suffix}</span>}
+      </div>
+    </div>
+  );
+}
+function BarVis({ label, value, max, color }) {
+  const w = max > 0 ? Math.min(100, (Math.abs(value) / max) * 100) : 0;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+      <div style={{ fontSize: 12, color: "#888", minWidth: 90, textAlign: "right" }}>{label}</div>
+      <div style={{ flex: 1, height: 18, background: "#f5f5f0", borderRadius: 6, overflow: "hidden" }}>
+        <div style={{ width: w + "%", height: "100%", background: color, borderRadius: 6 }} />
+      </div>
+      <div style={{ fontSize: 12, fontWeight: 500, minWidth: 70 }}>{fmt(value)}</div>
+    </div>
+  );
+}
+function MiniBar({ segments, height = 14 }) {
+  const total = segments.reduce((a, s) => a + s.value, 0);
+  return (
+    <div style={{ display: "flex", height, borderRadius: 6, overflow: "hidden", background: "#f5f5f0" }}>
+      {segments.map((s, i) => <div key={i} style={{ width: total > 0 ? (s.value / total * 100) + "%" : 0, background: s.color, height: "100%" }} />)}
+    </div>
+  );
+}
+function KPICard({ label, target, actual, unit = "", invert = false, format = "number" }) {
+  const a = parseFloat(actual), t = parseFloat(target);
+  const hasA = !isNaN(a), hasT = !isNaN(t) && t !== 0;
+  let p = 0, status = "none", sc = C.gray;
+  if (hasA && hasT) {
+    p = invert ? (t / Math.max(a, 0.01)) * 100 : (a / t) * 100;
+    if (p >= 100) { status = "达标"; sc = C.green; } else if (p >= 80) { status = "接近"; sc = C.amber; } else { status = "未达标"; sc = C.red; }
+  }
+  const dA = hasA ? (format === "money" ? fmt(a) : Math.round(a) + unit) : "—";
+  const dT = hasT ? (format === "money" ? fmt(t) : Math.round(t) + unit) : "—";
+  return (
+    <div style={{ background: "#f5f5f0", borderRadius: 8, padding: "10px 12px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+        <span style={{ fontSize: 12, color: "#888" }}>{label}</span>
+        {status !== "none" && <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: sc.bg, color: sc.tx, fontWeight: 500 }}>{status} {Math.round(p)}%</span>}
+      </div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+        <span style={{ fontSize: 20, fontWeight: 500, color: hasA ? sc.mid : "inherit" }}>{dA}</span>
+        <span style={{ fontSize: 12, color: "#aaa" }}>/ {dT}</span>
+      </div>
+      {hasA && hasT && <div style={{ marginTop: 6, height: 4, background: "#e8e8e4", borderRadius: 2, overflow: "hidden" }}><div style={{ height: "100%", width: Math.min(100, p) + "%", background: sc.mid, borderRadius: 2 }} /></div>}
+    </div>
+  );
+}
+function Pill({ text, color }) {
+  return <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: color.bg, color: color.tx, fontWeight: 500 }}>{text}</span>;
+}
+function Btn({ children, onClick, active, small, color = C.teal }) {
+  return <button onClick={onClick} style={{ padding: small ? "3px 10px" : "6px 14px", fontSize: small ? 12 : 13, borderRadius: 6, cursor: "pointer", background: active ? color.bg : "transparent", color: active ? color.tx : "#888", border: active ? "1px solid " + color.mid : "1px solid #ddd", fontWeight: active ? 500 : 400 }}>{children}</button>;
+}
+function BarChart({ data, labelKey, valueKey, colorFn, heightPx = 130, unit = "" }) {
+  const maxV = Math.max(...data.map(d => Math.abs(d[valueKey])), 1);
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 2, height: heightPx }}>
+        {data.map((d, i) => {
+          const h = Math.max(2, (Math.abs(d[valueKey]) / maxV) * (heightPx - 20));
+          return (
+            <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end" }}>
+              <div style={{ fontSize: 9, color: "#888", marginBottom: 2 }}>{unit === "万" ? (d[valueKey] / 10000).toFixed(1) : d[valueKey]}</div>
+              <div style={{ width: "75%", height: h, background: colorFn(d), borderRadius: 3 }} />
+              <div style={{ fontSize: 10, color: "#888", marginTop: 3 }}>{d[labelKey]}</div>
+            </div>
+          );
+        })}
+      </div>
+      {unit && <div style={{ fontSize: 11, color: "#888", textAlign: "center", marginTop: 4 }}>{unit}</div>}
     </div>
   );
 }
 
-var PLAY_YEARS = ['<1年', '1-3年', '3-5年', '5-10年', '10+年'];
-var PLAY_STYLES = ['横拍两面反胶', '横拍颗粒', '削球', '直拍两面反胶', '直拍颗粒'];
-var HANDS = ['右手', '左手'];
+// ===== PAGE 1: DASHBOARD =====
+function Dashboard({ students, monthData }) {
+  const activeStudents = students.filter(s => s.remainHrs > 0);
+  const totalRemainHrs = students.reduce((a, s) => a + (parseFloat(s.remainHrs) || 0), 0);
+  const oldPkg = students.filter(s => s.pkgPrice === 2199);
+  const newPkg = students.filter(s => s.pkgPrice === 2699);
+  const lowHrs = activeStudents.filter(s => s.remainHrs <= 3 && s.remainHrs > 0);
+  const prepaidLiability = students.reduce((a, s) => a + (parseFloat(s.remainHrs) || 0) * (s.pkgPrice === 2199 ? 219.9 : 269.9), 0);
 
-export default function App() {
-  var _s1 = useState('intro'), phase = _s1[0], setPhase = _s1[1];
-  var _s2 = useState([]), shuffled = _s2[0], setShuffled = _s2[1];
-  var _s3 = useState({}), answers = _s3[0], setAnswers = _s3[1];
-  var _s4 = useState(0), currentQ = _s4[0], setCurrentQ = _s4[1];
-  var _s5 = useState({}), scores = _s5[0], setScores = _s5[1];
-  var _s6 = useState({}), profile = _s6[0], setProfile = _s6[1];
-  var resultRef = useRef(null);
+  const filledMonths = MONTHS.map((_, i) => {
+    const d = monthData[i];
+    const rev = (parseFloat(d.pvtRevenue)||0)+(parseFloat(d.adultRevenue)||0)+(parseFloat(d.campRevenue)||0)+(parseFloat(d.tableRevenue)||0);
+    const cost = (parseFloat(d.coachCost)||0)+(parseFloat(d.rent)||0)+(parseFloat(d.misc)||0);
+    return { rev, cost, profit: rev - cost, hasData: rev > 0 || cost > 0 };
+  });
+  const filled = filledMonths.filter(d => d.hasData);
+  const cumProfit = filled.reduce((a, d) => a + d.profit, 0);
 
-  function startTest() { setShuffled(shuffleArray(QUESTIONS)); setAnswers({}); setCurrentQ(0); setPhase('test'); }
-  function handleAnswer(qIdx, val) { var na = Object.assign({}, answers); na[qIdx] = val; setAnswers(na); if (currentQ < shuffled.length - 1) setTimeout(function() { setCurrentQ(currentQ + 1); }, 150); }
+  return (
+    <div>
+      <Sec title="经营总览">
+        <G cols={4}>
+          <Metric label="总学员数" value={students.length + "人"} sub={`活跃 ${activeStudents.length} / 课时耗尽 ${students.length - activeStudents.length}`} />
+          <Metric label="总剩余课时" value={Math.round(totalRemainHrs) + "h"} color={C.amber.mid} sub={`预收负债 ${fmt(prepaidLiability)}`} />
+          <Metric label="即将续费（≤3h）" value={lowHrs.length + "人"} color={lowHrs.length > 3 ? C.red.mid : C.amber.mid} />
+          <Metric label="本年累计利润" value={fmt(cumProfit)} color={cumProfit >= 0 ? C.green.mid : C.red.mid} sub={`${filled.length}个月数据`} />
+        </G>
+      </Sec>
+      <Sec title="套餐结构">
+        <G cols={2}>
+          <div style={{ background: C.amber.bg, borderRadius: 8, padding: 12 }}>
+            <div style={{ fontSize: 12, color: C.amber.tx }}>老套餐 ¥2,199/10h</div>
+            <div style={{ fontSize: 20, fontWeight: 500, color: C.amber.tx }}>{oldPkg.length}人</div>
+            <div style={{ fontSize: 11, color: C.amber.tx, marginTop: 4 }}>剩余 {Math.round(oldPkg.reduce((a, s) => a + (parseFloat(s.remainHrs)||0), 0))}h</div>
+          </div>
+          <div style={{ background: C.teal.bg, borderRadius: 8, padding: 12 }}>
+            <div style={{ fontSize: 12, color: C.teal.tx }}>新套餐 ¥2,699/10h</div>
+            <div style={{ fontSize: 20, fontWeight: 500, color: C.teal.tx }}>{newPkg.length}人</div>
+            <div style={{ fontSize: 11, color: C.teal.tx, marginTop: 4 }}>剩余 {Math.round(newPkg.reduce((a, s) => a + (parseFloat(s.remainHrs)||0), 0))}h</div>
+          </div>
+        </G>
+      </Sec>
+      {lowHrs.length > 0 && (
+        <Sec title="续费预警（剩余≤3小时）">
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {lowHrs.map((s, i) => (
+              <div key={i} style={{ background: C.red.bg, borderRadius: 6, padding: "6px 10px", fontSize: 12, color: C.red.tx }}>{s.name} <span style={{ fontWeight: 500 }}>{s.remainHrs}h</span></div>
+            ))}
+          </div>
+        </Sec>
+      )}
+      {filled.length > 0 && (
+        <Sec title="月度利润走势">
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 120 }}>
+            {filledMonths.map((d, i) => {
+              const maxV = Math.max(...filledMonths.map(x => Math.max(Math.abs(x.profit), 1)));
+              const h = d.hasData ? Math.max(2, (Math.abs(d.profit) / maxV) * 100) : 0;
+              return (
+                <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end" }}>
+                  {d.hasData && <div style={{ fontSize: 8, color: d.profit >= 0 ? C.green.mid : C.red.mid, marginBottom: 2 }}>{(d.profit/10000).toFixed(1)}</div>}
+                  <div style={{ width: "70%", height: h || 2, background: d.hasData ? (d.profit >= 0 ? C.teal.mid : C.red.mid) : "#e8e8e4", borderRadius: 2 }} />
+                  <div style={{ fontSize: 9, color: "#888", marginTop: 3 }}>{MONTHS[i]}</div>
+                </div>
+              );
+            })}
+          </div>
+        </Sec>
+      )}
+    </div>
+  );
+}
 
-  var calcScores = useCallback(function() {
-    var ds = {};
-    DIMENSIONS.forEach(function(d) {
-      var qs = shuffled.filter(function(q) { return q.dim === d.key; });
-      var total = 0;
-      qs.forEach(function(q) { var idx = shuffled.indexOf(q); var raw = answers[idx] !== undefined ? answers[idx] : 1; total += raw; });
-      ds[d.key] = (total / (qs.length * 2)) * 100;
+// ===== PAGE 2: STUDENTS =====
+function Students({ students, setStudents }) {
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("all");
+  const [showAdd, setShowAdd] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newPkg, setNewPkg] = useState(2699);
+  const [newHrs, setNewHrs] = useState("10");
+  const [newFreq, setNewFreq] = useState("2");
+  const [newType, setNewType] = useState("active");
+  const [bulkText, setBulkText] = useState("");
+  const [showBulk, setShowBulk] = useState(false);
+
+  const filtered = useMemo(() => {
+    let list = students;
+    if (search) list = list.filter(s => s.name.includes(search));
+    if (filter === "active") list = list.filter(s => s.remainHrs > 0);
+    if (filter === "low") list = list.filter(s => s.remainHrs > 0 && s.remainHrs <= 3);
+    if (filter === "expired") list = list.filter(s => s.remainHrs <= 0);
+    if (filter === "old") list = list.filter(s => s.pkgPrice === 2199);
+    if (filter === "new") list = list.filter(s => s.pkgPrice === 2699);
+    return list;
+  }, [students, search, filter]);
+
+  const addStudent = () => {
+    if (!newName.trim()) return;
+    setStudents(prev => [...prev, { id: Date.now(), name: newName.trim(), pkgPrice: newPkg, remainHrs: parseFloat(newHrs) || 10, freq: parseInt(newFreq) || 2, type: newType }]);
+    setNewName(""); setNewHrs("10"); setShowAdd(false);
+  };
+  const removeStudent = id => setStudents(prev => prev.filter(s => s.id !== id));
+  const updateHrs = (id, hrs) => setStudents(prev => prev.map(s => s.id === id ? { ...s, remainHrs: parseFloat(hrs) || 0 } : s));
+
+  const bulkImport = () => {
+    const lines = bulkText.trim().split("\n").filter(l => l.trim());
+    const newSt = lines.map((line, i) => {
+      const parts = line.split(/[,\t，]/).map(s => s.trim());
+      return { id: Date.now() + i, name: parts[0] || `学员${students.length + i + 1}`, pkgPrice: parts[2] && parts[2].includes("2199") ? 2199 : 2699, remainHrs: parseFloat(parts[1]) || 10, freq: parseInt(parts[3]) || 2, type: (parseInt(parts[3]) || 2) >= 2 ? "active" : "casual" };
     });
-    return ds;
-  }, [shuffled, answers]);
+    setStudents(prev => [...prev, ...newSt]);
+    setBulkText(""); setShowBulk(false);
+  };
 
-  var allAnswered = shuffled.length > 0 && shuffled.every(function(_, i) { return answers[i] !== undefined; });
-  function showResult() { setScores(calcScores()); setPhase('result'); window.scrollTo(0, 0); }
+  return (
+    <div>
+      <Sec title="学员管理" right={<div style={{ display: "flex", gap: 4 }}><Btn small onClick={() => { setShowBulk(!showBulk); setShowAdd(false); }}>批量导入</Btn><Btn small active onClick={() => { setShowAdd(!showAdd); setShowBulk(false); }} color={C.green}>+ 添加学员</Btn></div>}>
+        {showAdd && (
+          <div style={{ background: C.green.bg, borderRadius: 8, padding: 12, marginBottom: 12 }}>
+            <G cols={3}>
+              <Inp label="姓名" value={newName} onChange={setNewName} type="text" placeholder="学员姓名" />
+              <div style={{ marginBottom: 8 }}><div style={{ fontSize: 12, color: "#888", marginBottom: 3 }}>套餐</div><div style={{ display: "flex", gap: 4 }}><Btn small active={newPkg === 2699} onClick={() => setNewPkg(2699)} color={C.teal}>¥2,699</Btn><Btn small active={newPkg === 2199} onClick={() => setNewPkg(2199)} color={C.amber}>¥2,199</Btn></div></div>
+              <Inp label="剩余课时" value={newHrs} onChange={setNewHrs} suffix="h" />
+            </G>
+            <G cols={3}>
+              <Inp label="每周频次" value={newFreq} onChange={setNewFreq} suffix="次" />
+              <div style={{ marginBottom: 8 }}><div style={{ fontSize: 12, color: "#888", marginBottom: 3 }}>类型</div><div style={{ display: "flex", gap: 4 }}><Btn small active={newType === "active"} onClick={() => setNewType("active")} color={C.teal}>活跃</Btn><Btn small active={newType === "casual"} onClick={() => setNewType("casual")} color={C.blue}>一般</Btn></div></div>
+              <div style={{ display: "flex", alignItems: "flex-end", paddingBottom: 8 }}><button onClick={addStudent} style={{ padding: "6px 20px", fontSize: 13, borderRadius: 6, background: C.green.mid, color: "white", border: "none", cursor: "pointer" }}>确认添加</button></div>
+            </G>
+          </div>
+        )}
+        {showBulk && (
+          <div style={{ background: C.blue.bg, borderRadius: 8, padding: 12, marginBottom: 12 }}>
+            <div style={{ fontSize: 12, color: C.blue.tx, marginBottom: 6 }}>每行一个学员，格式：姓名, 剩余课时, 套餐(2199或2699), 周频次</div>
+            <textarea value={bulkText} onChange={e => setBulkText(e.target.value)} rows={5} placeholder={"张三, 8, 2699, 2\n李四, 3, 2199, 1"} style={{ width: "100%", fontSize: 13, padding: 8, borderRadius: 6, border: "1px solid #ccc", background: "transparent", color: "inherit", resize: "vertical" }} />
+            <button onClick={bulkImport} style={{ marginTop: 8, padding: "6px 20px", fontSize: 13, borderRadius: 6, background: C.blue.mid, color: "white", border: "none", cursor: "pointer" }}>导入</button>
+          </div>
+        )}
+      </Sec>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center", flexWrap: "wrap" }}>
+        <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="搜索学员..." style={{ flex: 1, minWidth: 120, fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid #ddd", background: "transparent", color: "inherit" }} />
+        {[["all","全部"],["active","活跃"],["low","即将续费"],["expired","已耗尽"],["old","老套餐"],["new","新套餐"]].map(([k, v]) => (
+          <Btn key={k} small active={filter === k} onClick={() => setFilter(k)}>{v}</Btn>
+        ))}
+      </div>
+      <G cols={3}>
+        <Metric label="总人数" value={students.length + "人"} />
+        <Metric label="总剩余课时" value={Math.round(students.reduce((a, s) => a + (parseFloat(s.remainHrs)||0), 0)) + "h"} color={C.amber.mid} />
+        <Metric label="预收款负债" value={fmt(students.reduce((a, s) => a + (parseFloat(s.remainHrs)||0) * (s.pkgPrice === 2199 ? 219.9 : 269.9), 0))} color={C.coral.mid} />
+      </G>
+      <div style={{ marginTop: 12, overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+          <thead><tr style={{ borderBottom: "1px solid #ddd" }}>
+            {["姓名","套餐","剩余课时","周频次","预计续费","类型","操作"].map(h => <th key={h} style={{ padding: "6px 4px", textAlign: "left", fontWeight: 500, color: "#888", fontSize: 11 }}>{h}</th>)}
+          </tr></thead>
+          <tbody>
+            {filtered.map(s => {
+              const wl = s.freq > 0 ? s.remainHrs / s.freq : 999;
+              const urgent = s.remainHrs <= 3 && s.remainHrs > 0;
+              return (
+                <tr key={s.id} style={{ borderBottom: "0.5px solid #eee", background: urgent ? C.red.bg : "transparent" }}>
+                  <td style={{ padding: "6px 4px", fontWeight: 500 }}>{s.name}</td>
+                  <td style={{ padding: "6px 4px" }}><Pill text={s.pkgPrice === 2199 ? "¥2,199" : "¥2,699"} color={s.pkgPrice === 2199 ? C.amber : C.teal} /></td>
+                  <td style={{ padding: "6px 4px" }}><input type="number" value={s.remainHrs} onChange={e => updateHrs(s.id, e.target.value)} style={{ width: 50, fontSize: 12, padding: "2px 4px", borderRadius: 4, border: "1px solid #ddd", background: "transparent", color: urgent ? C.red.mid : "inherit", fontWeight: urgent ? 500 : 400 }} />h</td>
+                  <td style={{ padding: "6px 4px" }}>{s.freq}次/周</td>
+                  <td style={{ padding: "6px 4px", color: wl <= 2 ? C.red.mid : wl <= 4 ? C.amber.mid : "#888" }}>{s.remainHrs <= 0 ? "已耗尽" : `${Math.round(wl)}周后`}</td>
+                  <td style={{ padding: "6px 4px" }}><Pill text={s.type === "active" ? "活跃" : "一般"} color={s.type === "active" ? C.teal : C.blue} /></td>
+                  <td style={{ padding: "6px 4px" }}><button onClick={() => removeStudent(s.id)} style={{ fontSize: 11, color: "#aaa", background: "none", border: "none", cursor: "pointer" }}>删除</button></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {filtered.length === 0 && <div style={{ padding: 20, textAlign: "center", color: "#aaa", fontSize: 13 }}>暂无学员数据</div>}
+      </div>
+    </div>
+  );
+}
 
-  useEffect(function() { if (phase === 'result' && resultRef.current) resultRef.current.scrollIntoView({ behavior: 'smooth' }); }, [phase]);
+// ===== PAGE 3: V8 FINANCIAL MODEL (COMPLETE) =====
+function FinModel() {
+  const [pvtStudents, setPvtStudents] = useState(15);
+  const [pvtFreq, setPvtFreq] = useState(2);
+  const [activeRatio, setActiveRatio] = useState(60);
+  const [newStudents, setNewStudents] = useState(4);
+  const [campStudents, setCampStudents] = useState(8);
+  const [campMonths, setCampMonths] = useState(3);
+  const [adultStudents, setAdultStudents] = useState(8);
+  const [adultFreq, setAdultFreq] = useState(2);
+  const [bossPct, setBossPct] = useState(50);
+  const [rent, setRent] = useState(10000);
+  const [reno, setReno] = useState(100000);
+  const [misc, setMisc] = useState(3000);
+  const [renewRate, setRenewRate] = useState(80);
+  const [tableRentHrs, setTableRentHrs] = useState(20);
+  const [memberHrs, setMemberHrs] = useState(15);
 
-  var progress = shuffled.length > 0 ? (Object.keys(answers).length / shuffled.length) * 100 : 0;
-  var font = "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+  const model = useMemo(() => {
+    const CW = 130, PKG = 2699, PKG_H = 10, HR = 269.9;
+    const CAMP_R = 260, CAMP_DW = 5, ADULT_R = 150;
+    const TR = 30, MR_RATE = 20, W = 4.33;
 
-  // ===== INTRO =====
-  if (phase === 'intro') {
-    return (
-      <div style={{ maxWidth: 600, margin: '0 auto', padding: 24, fontFamily: font }}>
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div style={{ fontSize: 56, marginBottom: 12 }}>🏓</div>
-          <h1 style={{ fontSize: 26, fontWeight: 800, color: '#111827', margin: '0 0 8px' }}>乒乓球打法人格测试</h1>
-          <p style={{ color: '#6b7280', fontSize: 15, margin: 0, lineHeight: 1.6 }}>通过情境选择题，发现你在比赛中的决策人格</p>
+    const actRat = activeRatio / 100;
+    const actF = pvtFreq, casF = Math.max(1, pvtFreq - 1);
+    const br = bossPct / 100;
+    const rr = renewRate / 100;
+    const actPkgMo = (PKG_H / actF) / W;
+    const casPkgMo = (PKG_H / casF) / W;
+
+    const initAct = Math.round(pvtStudents * actRat);
+    const initCas = pvtStudents - initAct;
+
+    const campGrp = Math.ceil(campStudents / 4);
+    const campHW = campGrp * 3 * CAMP_DW;
+    const adultSW = Math.ceil(adultStudents / 4) * adultFreq;
+    const adultHW = adultSW * 1.5;
+    const adultRevMo = adultStudents * adultFreq * ADULT_R * W;
+    const tableRevMo = tableRentHrs * TR * W;
+    const memberRevMo = memberHrs * MR_RATE * W;
+    const campRevMo = campStudents * CAMP_R * CAMP_DW * W;
+
+    const firstPre = pvtStudents * PKG;
+    const totalInv = rent * 3 + reno;
+
+    const batches = [{ mo: 0, act: initAct, cas: initCas }];
+    const monthly = [];
+    let cumCash = 0, cumProf = 0, beMo = null;
+    let prepaidBal = firstPre;
+
+    for (let mo = 1; mo <= 12; mo++) {
+      const isCamp = (mo === 1 || mo === 2 || mo === 7 || mo === 8) && campMonths > 0;
+      const newAct = Math.round(newStudents * actRat);
+      const newCas = newStudents - newAct;
+      if (newStudents > 0) batches.push({ mo, act: newAct, cas: newCas });
+
+      let totalAct = 0, totalCas = 0;
+      for (const b of batches) { if (b.mo <= mo) { totalAct += b.act; totalCas += b.cas; } }
+      const totalSt = totalAct + totalCas;
+
+      const pvtHW = totalAct * actF + totalCas * casF;
+      const normHW = pvtHW + adultHW;
+      const fullHW = normHW + campHW;
+      const teachHW = isCamp ? fullHW : normHW;
+      const coachHW = teachHW * (1 - br);
+      const coachCost = coachHW * CW * W;
+
+      const pvtConfirmed = pvtHW * HR * W;
+      const adultConf = adultRevMo;
+      const tableConf = tableRevMo;
+      const memberConf = memberRevMo;
+      const campConf = isCamp ? campRevMo : 0;
+      const moRevenue = pvtConfirmed + adultConf + tableConf + memberConf + campConf;
+
+      const newPrepaidCashIn = newStudents * PKG;
+      let renewCash = 0, renewCount = 0;
+      for (const b of batches) {
+        const age = mo - b.mo;
+        if (age > 0) {
+          if (b.act > 0 && age % Math.max(1, Math.round(actPkgMo)) === 0) {
+            const n = Math.round(b.act * rr); renewCash += n * PKG; renewCount += n;
+          }
+          if (b.cas > 0 && age % Math.max(1, Math.round(casPkgMo)) === 0) {
+            const n = Math.round(b.cas * rr); renewCash += n * PKG; renewCount += n;
+          }
+        }
+      }
+
+      const nonPrepaidCashIn = adultConf + tableConf + memberConf + campConf;
+      const totalCashIn = newPrepaidCashIn + renewCash + nonPrepaidCashIn;
+      const totalCashOut = rent + coachCost + misc;
+      const netCash = totalCashIn - totalCashOut;
+
+      prepaidBal = prepaidBal + newPrepaidCashIn + renewCash - pvtConfirmed;
+      if (prepaidBal < 0) prepaidBal = 0;
+
+      const moCost = rent + coachCost + misc;
+      const moProfit = moRevenue - moCost;
+
+      cumCash += netCash;
+      cumProf += moProfit;
+      if (beMo === null && cumProf >= totalInv) beMo = mo;
+
+      const resTotal = coachCost + rent + misc;
+
+      monthly.push({
+        month: mo, isCamp, totalStudents: totalSt,
+        revenue: Math.round(moRevenue), cost: Math.round(moCost), profit: Math.round(moProfit), cumProfit: Math.round(cumProf),
+        newCashIn: Math.round(newPrepaidCashIn), renewCashIn: Math.round(renewCash), renewCount,
+        cashIn: Math.round(totalCashIn), cashOut: Math.round(totalCashOut),
+        netCash: Math.round(netCash), cumCash: Math.round(cumCash),
+        reserveWage: Math.round(coachCost), reserveTotal: Math.round(resTotal),
+        freeCash: Math.round(cumCash - resTotal),
+        prepaidBal: Math.round(prepaidBal),
+        pvtRev: Math.round(pvtConfirmed), campRev: Math.round(campConf),
+        adultRev: Math.round(adultConf), tableRev: Math.round(tableConf + memberConf),
+        bossH: Math.round(teachHW * br), coachH: Math.round(coachHW),
+      });
+    }
+
+    const yrRev = monthly.reduce((a, x) => a + x.revenue, 0);
+    const yrCost = monthly.reduce((a, x) => a + x.cost, 0);
+    const yrProf = yrRev - yrCost;
+    if (beMo === null && yrProf > 0) {
+      beMo = Math.ceil(totalInv / (yrProf / 12));
+      if (beMo > 36) beMo = null;
+    }
+
+    const initPvtHW = initAct * actF + initCas * casF;
+    const initNormHW = initPvtHW + adultHW;
+    const initCampTHW = initNormHW + campHW;
+    const pvtRM0 = initPvtHW * HR * W;
+    const coachCN0 = initNormHW * (1 - br) * CW * W;
+    const coachCC0 = initCampTHW * (1 - br) * CW * W;
+
+    return {
+      initAct, initCas, actF, casF, actPkgMo, casPkgMo,
+      initNormHW, initCampTHW,
+      bossHN: Math.round(initNormHW * br), coachHN: Math.round(initNormHW * (1 - br)),
+      coachCN0, coachCC0,
+      pvtRM0, campRevMo, adultRevMo, tableRevMo, memberRevMo, newRM: newStudents * PKG,
+      firstPre, totalInv,
+      monthly, yrRev, yrCost, yrProf, beMo,
+    };
+  }, [pvtStudents, pvtFreq, activeRatio, newStudents, campStudents, campMonths, adultStudents, adultFreq, bossPct, rent, reno, misc, renewRate, tableRentHrs, memberHrs]);
+
+  const md = model;
+  const maxRev = Math.max(md.pvtRM0, md.campRevMo, md.adultRevMo, md.tableRevMo, md.memberRevMo, md.newRM, 1);
+  const [tab, setTab] = useState(0);
+  const tabs = ["参数设置", "收支总览", "预收款与现金流", "月度明细", "全年利润"];
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 4, marginBottom: 16, flexWrap: "wrap" }}>
+        {tabs.map((t, i) => <Btn key={i} small active={tab === i} onClick={() => setTab(i)}>{t}</Btn>)}
+      </div>
+
+      {tab === 0 && (
+        <div>
+          <Sec title="1对1私教（¥2,699/10小时套餐）">
+            <G><Sl label="初始学员数" value={pvtStudents} onChange={setPvtStudents} min={1} max={40} suffix="人" /><Sl label="基准频次（活跃用户）" value={pvtFreq} onChange={setPvtFreq} min={1} max={5} suffix="次/周" /></G>
+            <G><Sl label="活跃用户比例" value={activeRatio} onChange={setActiveRatio} min={10} max={100} step={5} suffix="%" /><Sl label="每月新增学员" value={newStudents} onChange={setNewStudents} min={0} max={10} suffix="人" /></G>
+            <div style={{ fontSize: 12, background: C.teal.bg, padding: "8px 10px", borderRadius: 6, color: C.teal.tx }}>
+              初始：活跃 {md.initAct}人×{md.actF}次/周 + 一般 {md.initCas}人×{md.casF}次/周 | 套餐周期：活跃 {md.actPkgMo.toFixed(1)}月 / 一般 {md.casPkgMo.toFixed(1)}月
+            </div>
+          </Sec>
+          <Sec title="寒暑假集训（¥260/天，周一至周五）">
+            <G><Sl label="集训学员" value={campStudents} onChange={setCampStudents} min={0} max={24} suffix="人" /><Sl label="集训月数/年" value={campMonths} onChange={setCampMonths} min={0} max={4} suffix="月" /></G>
+          </Sec>
+          <Sec title="成人小班课（¥150/1.5h）">
+            <G><Sl label="学员数" value={adultStudents} onChange={setAdultStudents} min={0} max={20} suffix="人" /><Sl label="每人每周" value={adultFreq} onChange={setAdultFreq} min={1} max={3} suffix="次" /></G>
+          </Sec>
+          <Sec title="球台租赁">
+            <G><Sl label="散客租台/周（¥30/h）" value={tableRentHrs} onChange={setTableRentHrs} min={0} max={60} suffix="h" /><Sl label="会员租台/周（¥20/h）" value={memberHrs} onChange={setMemberHrs} min={0} max={60} suffix="h" /></G>
+          </Sec>
+          <Sec title="运营参数">
+            <G><Sl label="老板带课比例" value={bossPct} onChange={setBossPct} min={0} max={100} step={5} suffix="%" /><Sl label="续费率" value={renewRate} onChange={setRenewRate} min={30} max={100} step={5} suffix="%" /></G>
+            <G><Sl label="月租金" value={rent} onChange={setRent} min={5000} max={25000} step={1000} /><Sl label="装修投入" value={reno} onChange={setReno} min={50000} max={200000} step={10000} /></G>
+            <Sl label="月杂费（水电等）" value={misc} onChange={setMisc} min={1000} max={10000} step={500} />
+          </Sec>
         </div>
-        <div style={{ background: '#f9fafb', borderRadius: 16, padding: 24, marginBottom: 24 }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, color: '#374151', margin: '0 0 16px' }}>📊 七大测评维度</h3>
-          {DIMENSIONS.map(function(d, i) { return (
-            <div key={d.key} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: i < 6 ? 12 : 0 }}>
-              <span style={{ fontSize: 20 }}>{d.icon}</span>
-              <div><div style={{ fontWeight: 600, fontSize: 14, color: '#1f2937' }}>{d.name}</div><div style={{ fontSize: 12, color: '#9ca3af' }}>{d.desc}</div></div>
-            </div>);
+      )}
+
+      {tab === 1 && (
+        <div>
+          <Sec title="月度确认收入构成（第1个月基准）">
+            <BarVis label="1对1消课" value={md.pvtRM0} max={maxRev} color={C.teal.mid} />
+            <BarVis label="成人小班" value={md.adultRevMo} max={maxRev} color={C.coral.mid} />
+            <BarVis label="散客租台" value={md.tableRevMo} max={maxRev} color={C.blue.mid} />
+            <BarVis label="会员租台" value={md.memberRevMo} max={maxRev} color={C.purple.mid} />
+            <div style={{ marginTop: 8 }}><BarVis label="集训月额外" value={md.campRevMo} max={maxRev} color={C.amber.mid} /></div>
+            <div style={{ fontSize: 11, color: "#888", marginTop: 4 }}>确认收入 = 实际消课/服务后确认，不含预收款</div>
+          </Sec>
+          <Sec title="老板 vs 教练（初始月）">
+            <G cols={3}>
+              <Metric label="平时周总课时" value={Math.round(md.initNormHW) + "h"} />
+              <Metric label="老板/周" value={md.bossHN + "h"} color={C.purple.mid} />
+              <Metric label="教练/周" value={md.coachHN + "h"} color={C.teal.mid} />
+            </G>
+            <div style={{ marginTop: 10 }}>
+              <MiniBar segments={[{ value: md.bossHN, color: C.purple.mid }, { value: md.coachHN, color: C.teal.mid }]} />
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#888", marginTop: 4 }}><span>老板 {pct(bossPct / 100)}</span><span>教练 {pct(1 - bossPct / 100)}</span></div>
+            </div>
+            <div style={{ marginTop: 12 }}><G cols={2}><Metric label="教练月薪（平时）" value={fmt(md.coachCN0)} /><Metric label="教练月薪（集训月）" value={fmt(md.coachCC0)} /></G></div>
+          </Sec>
+          <Sec title="每月工作量变化（老板 vs 教练，周课时）">
+            <div style={{ display: "flex", alignItems: "flex-end", gap: 2, height: 150 }}>
+              {md.monthly.map((mo, i) => {
+                const total = mo.bossH + mo.coachH;
+                const maxH = Math.max(...md.monthly.map(x => x.bossH + x.coachH), 1);
+                const h = Math.max(4, (total / maxH) * 120);
+                const bH = total > 0 ? (mo.bossH / total) * h : 0;
+                return (
+                  <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end" }}>
+                    <div style={{ fontSize: 9, color: "#888", marginBottom: 2 }}>{total}</div>
+                    <div style={{ width: "75%", display: "flex", flexDirection: "column", borderRadius: 3, overflow: "hidden" }}>
+                      <div style={{ height: bH, background: C.purple.mid }} />
+                      <div style={{ height: h - bH, background: C.teal.mid }} />
+                    </div>
+                    <div style={{ fontSize: 10, color: mo.isCamp ? C.blue.mid : "#888", marginTop: 3, fontWeight: mo.isCamp ? 500 : 400 }}>{mo.month}</div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ display: "flex", gap: 16, justifyContent: "center", marginTop: 8, fontSize: 11, color: "#888" }}>
+              <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: C.purple.mid, marginRight: 4, verticalAlign: "middle" }} />老板</span>
+              <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: C.teal.mid, marginRight: 4, verticalAlign: "middle" }} />教练</span>
+            </div>
+          </Sec>
+          <Sec title="月度利润变化（确认收入 - 成本）">
+            <BarChart data={md.monthly} labelKey="month" valueKey="profit" colorFn={d => d.profit >= 0 ? (d.isCamp ? C.blue.mid : C.teal.mid) : C.red.mid} heightPx={120} unit="万" />
+            <div style={{ display: "flex", gap: 16, justifyContent: "center", marginTop: 8, fontSize: 11, color: "#888" }}>
+              <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: C.teal.mid, marginRight: 4, verticalAlign: "middle" }} />平时月</span>
+              <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: C.blue.mid, marginRight: 4, verticalAlign: "middle" }} />集训月</span>
+            </div>
+          </Sec>
+        </div>
+      )}
+
+      {tab === 2 && (
+        <div>
+          <Sec title="预收款概览">
+            <G cols={3}>
+              <Metric label="首批预收（开业）" value={fmt(md.firstPre)} color={C.green.mid} />
+              <Metric label="每月新学员预收" value={fmt(newStudents * 2699)} color={C.teal.mid} />
+              <Metric label="初始投入" value={fmt(md.totalInv)} />
+            </G>
+            <div style={{ fontSize: 11, color: "#888", marginTop: 8 }}>预收款 = 学员预付套餐费（尚未消课），随消课逐步转为确认收入。</div>
+          </Sec>
+          <Sec title="消课周期与续费节奏">
+            <G cols={2}>
+              <div style={{ background: C.teal.bg, borderRadius: 8, padding: 12 }}><div style={{ fontSize: 12, color: C.teal.tx }}>活跃 ({md.initAct}人 × {md.actF}次/周)</div><div style={{ fontSize: 18, fontWeight: 500, color: C.teal.tx }}>{md.actPkgMo.toFixed(1)}个月消完 → 续费</div></div>
+              <div style={{ background: C.blue.bg, borderRadius: 8, padding: 12 }}><div style={{ fontSize: 12, color: C.blue.tx }}>一般 ({md.initCas}人 × {md.casF}次/周)</div><div style={{ fontSize: 18, fontWeight: 500, color: C.blue.tx }}>{md.casPkgMo.toFixed(1)}个月消完 → 续费</div></div>
+            </G>
+          </Sec>
+          <Sec title="每月续费入账">
+            <BarChart data={md.monthly} labelKey="month" valueKey="renewCashIn" colorFn={d => d.renewCashIn > 0 ? C.teal.mid : "#ddd"} heightPx={110} unit="万" />
+          </Sec>
+          <Sec title="预收款余额（负债）">
+            <BarChart data={md.monthly} labelKey="month" valueKey="prepaidBal" colorFn={() => C.amber.mid} heightPx={100} unit="万" />
+          </Sec>
+          <Sec title="每月实际现金流入 vs 流出">
+            <div style={{ display: "flex", alignItems: "flex-end", gap: 2, height: 140 }}>
+              {md.monthly.map((mo, i) => {
+                const maxV = Math.max(...md.monthly.map(x => Math.max(x.cashIn, x.cashOut)), 1);
+                const hIn = Math.max(2, (mo.cashIn / maxV) * 110);
+                const hOut = Math.max(2, (mo.cashOut / maxV) * 110);
+                return (
+                  <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", gap: 1 }}>
+                    <div style={{ fontSize: 8, color: "#888" }}>{Math.round(mo.netCash / 1000)}k</div>
+                    <div style={{ display: "flex", gap: 1, alignItems: "flex-end" }}>
+                      <div style={{ width: 12, height: hIn, background: C.teal.mid, borderRadius: 2 }} />
+                      <div style={{ width: 12, height: hOut, background: C.red.mid, borderRadius: 2 }} />
+                    </div>
+                    <div style={{ fontSize: 10, color: "#888", marginTop: 2 }}>{mo.month}</div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ display: "flex", gap: 16, justifyContent: "center", marginTop: 8, fontSize: 11, color: "#888" }}>
+              <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: C.teal.mid, marginRight: 4, verticalAlign: "middle" }} />现金流入</span>
+              <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: C.red.mid, marginRight: 4, verticalAlign: "middle" }} />现金流出</span>
+            </div>
+          </Sec>
+        </div>
+      )}
+
+      {tab === 3 && (
+        <div>
+          <Sec title="月度明细（现金口径）">
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, minWidth: 780 }}>
+                <thead><tr style={{ borderBottom: "1px solid #ddd" }}>
+                  {["月","","学员","确认收入","成本","利润","新学员预收","续费预收","现金流入","现金流出","净现金","累计现金","预留","可用"].map(h => (
+                    <th key={h} style={{ padding: "5px 2px", textAlign: "right", fontWeight: 500, color: "#888", fontSize: 10, whiteSpace: "nowrap" }}>{h}</th>
+                  ))}
+                </tr></thead>
+                <tbody>
+                  {md.monthly.map((mo, i) => (
+                    <tr key={i} style={{ borderBottom: "0.5px solid #eee", background: mo.isCamp ? C.blue.bg : "transparent" }}>
+                      <td style={{ padding: "4px 2px", textAlign: "right" }}>{mo.month}</td>
+                      <td style={{ padding: "4px 2px", textAlign: "right" }}>{mo.isCamp ? <Pill text="集训" color={C.blue} /> : <span style={{ fontSize: 9, color: "#aaa" }}>平时</span>}</td>
+                      <td style={{ padding: "4px 2px", textAlign: "right", color: C.teal.mid }}>{mo.totalStudents}</td>
+                      <td style={{ padding: "4px 2px", textAlign: "right" }}>{fmt(mo.revenue)}</td>
+                      <td style={{ padding: "4px 2px", textAlign: "right", color: C.red.mid }}>{fmt(mo.cost)}</td>
+                      <td style={{ padding: "4px 2px", textAlign: "right", color: mo.profit >= 0 ? C.green.mid : C.red.mid, fontWeight: 500 }}>{fmt(mo.profit)}</td>
+                      <td style={{ padding: "4px 2px", textAlign: "right", color: mo.newCashIn > 0 ? C.green.mid : "#ccc" }}>{mo.newCashIn > 0 ? fmt(mo.newCashIn) : "-"}</td>
+                      <td style={{ padding: "4px 2px", textAlign: "right", color: mo.renewCashIn > 0 ? C.teal.mid : "#ccc" }}>{mo.renewCashIn > 0 ? fmt(mo.renewCashIn) + "(" + mo.renewCount + "人)" : "-"}</td>
+                      <td style={{ padding: "4px 2px", textAlign: "right", color: C.teal.mid }}>{fmt(mo.cashIn)}</td>
+                      <td style={{ padding: "4px 2px", textAlign: "right", color: C.red.mid }}>{fmt(mo.cashOut)}</td>
+                      <td style={{ padding: "4px 2px", textAlign: "right", fontWeight: 500, color: mo.netCash >= 0 ? C.green.mid : C.red.mid }}>{fmt(mo.netCash)}</td>
+                      <td style={{ padding: "4px 2px", textAlign: "right", fontWeight: 500 }}>{fmt(mo.cumCash)}</td>
+                      <td style={{ padding: "4px 2px", textAlign: "right", color: C.amber.mid }}>{fmt(mo.reserveTotal)}</td>
+                      <td style={{ padding: "4px 2px", textAlign: "right", fontWeight: 500, color: mo.freeCash >= 0 ? C.green.mid : C.red.mid }}>{fmt(mo.freeCash)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ fontSize: 11, color: "#888", marginTop: 8, lineHeight: 1.8 }}>
+              确认收入 = 已消课/已服务金额（权责发生制）<br/>
+              现金流入 = 新学员预收 + 续费预收 + 成人小班 + 租台 + 集训（收付实现制）<br/>
+              预留 = 下月教练工资+房租+杂费 | 可用 = 累计现金 - 预留
+            </div>
+          </Sec>
+          <Sec title="累计现金趋势">
+            <BarChart data={md.monthly} labelKey="month" valueKey="cumCash" colorFn={d => d.cumCash >= 0 ? C.teal.mid : C.red.mid} heightPx={130} unit="万" />
+          </Sec>
+        </div>
+      )}
+
+      {tab === 4 && (
+        <div>
+          <Sec title="全年利润汇总（权责发生制）">
+            <G cols={3}>
+              <Metric label="全年确认收入" value={fmt(md.yrRev)} color={C.teal.mid} />
+              <Metric label="全年总成本" value={fmt(md.yrCost)} color={C.coral.mid} />
+              <Metric label="全年净利润" value={fmt(md.yrProf)} color={md.yrProf >= 0 ? C.green.mid : C.red.mid} />
+            </G>
+            <div style={{ marginTop: 12 }}><G cols={3}>
+              <Metric label="初始投入" value={fmt(md.totalInv)} />
+              <Metric label="回本周期" value={md.beMo ? md.beMo + "个月" : ">36个月"} color={C.blue.mid} />
+              <Metric label="年化ROI" value={md.totalInv > 0 ? Math.round(md.yrProf / md.totalInv * 100) + "%" : "-"} color={md.yrProf >= 0 ? C.green.mid : C.red.mid} />
+            </G></div>
+          </Sec>
+          <Sec title="月度利润走势">
+            <BarChart data={md.monthly} labelKey="month" valueKey="profit" colorFn={d => d.profit >= 0 ? (d.isCamp ? C.blue.mid : C.teal.mid) : C.red.mid} heightPx={130} unit="万" />
+            <div style={{ display: "flex", gap: 16, justifyContent: "center", marginTop: 8, fontSize: 11, color: "#888" }}>
+              <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: C.teal.mid, marginRight: 4, verticalAlign: "middle" }} />平时月</span>
+              <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: C.blue.mid, marginRight: 4, verticalAlign: "middle" }} />集训月</span>
+            </div>
+          </Sec>
+          <Sec title="确认收入来源年度占比">
+            {(() => {
+              const pvtYr = md.monthly.reduce((a, x) => a + x.pvtRev, 0);
+              const campYr = md.monthly.reduce((a, x) => a + x.campRev, 0);
+              const adultYr = md.monthly.reduce((a, x) => a + x.adultRev, 0);
+              const tableYr = md.monthly.reduce((a, x) => a + x.tableRev, 0);
+              const items = [
+                { label: "1对1消课", value: pvtYr, color: C.teal.mid },
+                { label: "集训", value: campYr, color: C.amber.mid },
+                { label: "成人小班", value: adultYr, color: C.coral.mid },
+                { label: "球台租赁", value: tableYr, color: C.blue.mid },
+              ];
+              const total = items.reduce((a, x) => a + x.value, 0) || 1;
+              return (<><MiniBar segments={items} height={22} /><div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 8 }}>{items.map((it, i) => (<div key={i} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: it.color, display: "inline-block" }} /><span style={{ color: "#888" }}>{it.label} {Math.round(it.value / total * 100)}% ({fmt(it.value)})</span></div>))}</div></>);
+            })()}
+          </Sec>
+          <Sec title="成本结构年度占比">
+            {(() => {
+              const coachYr = md.monthly.reduce((a, x) => a + x.reserveWage, 0);
+              const items = [
+                { label: "房租", value: rent * 12, color: C.red.mid },
+                { label: "教练工资", value: coachYr, color: C.pink.mid },
+                { label: "水电杂费", value: misc * 12, color: C.gray.mid },
+              ];
+              const total = items.reduce((a, x) => a + x.value, 0) || 1;
+              return (<><MiniBar segments={items} height={22} /><div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 8 }}>{items.map((it, i) => (<div key={i} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: it.color, display: "inline-block" }} /><span style={{ color: "#888" }}>{it.label} {Math.round(it.value / total * 100)}% ({fmt(it.value)})</span></div>))}</div></>);
+            })()}
+          </Sec>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ===== PAGE 4: KPI TRACKER =====
+function KPITracker({ monthData, setMonthData, targets, setTargets, students }) {
+  const [selMonth, setSelMonth] = useState(0);
+  const [sub, setSub] = useState(0);
+  const subs = ["目标设定", "月度录入", "达标分析"];
+  const act = monthData[selMonth];
+  const setAct = (f, v) => setMonthData(prev => ({ ...prev, [selMonth]: { ...prev[selMonth], [f]: v } }));
+  const isCamp = selMonth === 0 || selMonth === 1 || selMonth === 6 || selMonth === 7;
+
+  const actualTotal = (parseFloat(act.pvtRevenue)||0)+(parseFloat(act.adultRevenue)||0)+(parseFloat(act.campRevenue)||0)+(parseFloat(act.tableRevenue)||0);
+  const actualCost = (parseFloat(act.coachCost)||0)+(parseFloat(act.rent)||0)+(parseFloat(act.misc)||0);
+  const actualProfit = actualTotal - actualCost;
+  const targetTotal = targets.pvtRevenue + targets.adultRevenue + (isCamp ? targets.campRevenue : 0) + targets.tableRevenue;
+  const prevTotal = selMonth > 0 ? (parseFloat(monthData[selMonth - 1].totalStudents)||0) : students.length;
+  const renewals = parseFloat(act.renewals)||0;
+  const dueRenew = prevTotal || students.length;
+  const actualRR = dueRenew > 0 ? Math.round((renewals / dueRenew) * 100) : 0;
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 4, marginBottom: 12 }}>
+        {subs.map((s, i) => <Btn key={i} small active={sub === i} onClick={() => setSub(i)}>{s}</Btn>)}
+      </div>
+      {sub >= 1 && (
+        <div style={{ display: "flex", gap: 3, marginBottom: 12, flexWrap: "wrap" }}>
+          {MONTHS.map((m, i) => {
+            const d = monthData[i]; const has = (parseFloat(d.pvtRevenue)||0) > 0;
+            return <Btn key={i} small active={selMonth === i} onClick={() => setSelMonth(i)} color={has && selMonth !== i ? C.green : C.blue}>{m}</Btn>;
           })}
         </div>
-        <div style={{ background: '#eff6ff', borderRadius: 12, padding: 16, marginBottom: 24 }}>
-          <p style={{ fontSize: 13, color: '#1e40af', margin: 0, lineHeight: 1.6 }}>{'💡 每道题描述一个比赛情境，选择最接近你真实反应的选项。共' + QUESTIONS.length + '题，约需5分钟。'}</p>
-        </div>
-        <button onClick={function() { setPhase('profile'); }} style={{ width: '100%', padding: '16px 0', fontSize: 17, fontWeight: 700, background: 'linear-gradient(135deg, #3b82f6, #2563eb)', color: '#fff', border: 'none', borderRadius: 12, cursor: 'pointer', boxShadow: '0 4px 14px rgba(59,130,246,0.35)' }}>开始测试 →</button>
-      </div>
-    );
-  }
-
-  // ===== PROFILE =====
-  if (phase === 'profile') {
-    var canStart = profile.years && profile.style && profile.hand;
-    return (
-      <div style={{ maxWidth: 600, margin: '0 auto', padding: 24, fontFamily: font }}>
-        <h2 style={{ fontSize: 20, fontWeight: 700, color: '#111827', margin: '0 0 4px' }}>📝 基本信息</h2>
-        <p style={{ fontSize: 13, color: '#6b7280', margin: '0 0 20px' }}>帮助我们更准确地分析你的打法风格</p>
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: '#374151', marginBottom: 8 }}>球龄</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {PLAY_YEARS.map(function(y) { var sel = profile.years === y; return <button key={y} onClick={function() { setProfile(Object.assign({}, profile, { years: y })); }} style={{ padding: '8px 16px', fontSize: 14, fontWeight: sel ? 700 : 500, background: sel ? '#eff6ff' : '#fff', color: sel ? '#2563eb' : '#374151', border: sel ? '2px solid #3b82f6' : '2px solid #e5e7eb', borderRadius: 10, cursor: 'pointer' }}>{y}</button>; })}
+      )}
+      {sub === 0 && (
+        <Sec title="月度目标设定">
+          <G><Inp label="新增学员目标" value={targets.newStudents} onChange={v => setTargets(p => ({...p, newStudents: +v}))} suffix="人" /><Inp label="续费率目标" value={targets.renewRate} onChange={v => setTargets(p => ({...p, renewRate: +v}))} suffix="%" /></G>
+          <G><Inp label="私教消课收入" value={targets.pvtRevenue} onChange={v => setTargets(p => ({...p, pvtRevenue: +v}))} prefix="¥" /><Inp label="成人小班收入" value={targets.adultRevenue} onChange={v => setTargets(p => ({...p, adultRevenue: +v}))} prefix="¥" /></G>
+          <G><Inp label="集训收入（集训月）" value={targets.campRevenue} onChange={v => setTargets(p => ({...p, campRevenue: +v}))} prefix="¥" /><Inp label="球台租赁收入" value={targets.tableRevenue} onChange={v => setTargets(p => ({...p, tableRevenue: +v}))} prefix="¥" /></G>
+          <Inp label="月成本上限" value={targets.totalCost} onChange={v => setTargets(p => ({...p, totalCost: +v}))} prefix="¥" />
+        </Sec>
+      )}
+      {sub === 1 && (
+        <div>
+          <Sec title={MONTHS[selMonth] + " 实际数据"} sub={isCamp ? "集训月" : "平时月"}>
+            <div style={{ fontSize: 13, fontWeight: 500, color: "#666", marginBottom: 8 }}>学员</div>
+            <G cols={4}>
+              <Inp label="新增" value={act.newStudents} onChange={v => setAct("newStudents", v)} suffix="人" />
+              <Inp label="续费" value={act.renewals} onChange={v => setAct("renewals", v)} suffix="人" />
+              <Inp label="流失" value={act.lostStudents} onChange={v => setAct("lostStudents", v)} suffix="人" />
+              <Inp label="月末总数" value={act.totalStudents} onChange={v => setAct("totalStudents", v)} suffix="人" />
+            </G>
+            <div style={{ fontSize: 13, fontWeight: 500, color: "#666", marginBottom: 8, marginTop: 8 }}>收入</div>
+            <G cols={2}><Inp label="私教消课" value={act.pvtRevenue} onChange={v => setAct("pvtRevenue", v)} prefix="¥" /><Inp label="成人小班" value={act.adultRevenue} onChange={v => setAct("adultRevenue", v)} prefix="¥" /></G>
+            <G cols={2}><Inp label="集训" value={act.campRevenue} onChange={v => setAct("campRevenue", v)} prefix="¥" /><Inp label="球台租赁" value={act.tableRevenue} onChange={v => setAct("tableRevenue", v)} prefix="¥" /></G>
+            <div style={{ fontSize: 13, fontWeight: 500, color: "#666", marginBottom: 8, marginTop: 8 }}>支出</div>
+            <G cols={3}><Inp label="教练工资" value={act.coachCost} onChange={v => setAct("coachCost", v)} prefix="¥" /><Inp label="房租" value={act.rent} onChange={v => setAct("rent", v)} prefix="¥" /><Inp label="杂费" value={act.misc} onChange={v => setAct("misc", v)} prefix="¥" /></G>
+          </Sec>
+          <div style={{ background: actualProfit >= 0 ? C.green.bg : C.red.bg, borderRadius: 8, padding: 12, display: "flex", justifyContent: "space-between" }}>
+            <span style={{ fontSize: 13, color: actualProfit >= 0 ? C.green.tx : C.red.tx }}>本月利润</span>
+            <span style={{ fontSize: 20, fontWeight: 500, color: actualProfit >= 0 ? C.green.mid : C.red.mid }}>{fmt(actualProfit)}</span>
           </div>
         </div>
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: '#374151', marginBottom: 8 }}>打法类型</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {PLAY_STYLES.map(function(s) { var sel = profile.style === s; return <button key={s} onClick={function() { setProfile(Object.assign({}, profile, { style: s })); }} style={{ padding: '8px 16px', fontSize: 14, fontWeight: sel ? 700 : 500, background: sel ? '#eff6ff' : '#fff', color: sel ? '#2563eb' : '#374151', border: sel ? '2px solid #3b82f6' : '2px solid #e5e7eb', borderRadius: 10, cursor: 'pointer' }}>{s}</button>; })}
-          </div>
-        </div>
-        <div style={{ marginBottom: 24 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: '#374151', marginBottom: 8 }}>持拍手</div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            {HANDS.map(function(h) { var sel = profile.hand === h; return <button key={h} onClick={function() { setProfile(Object.assign({}, profile, { hand: h })); }} style={{ padding: '8px 24px', fontSize: 14, fontWeight: sel ? 700 : 500, background: sel ? '#eff6ff' : '#fff', color: sel ? '#2563eb' : '#374151', border: sel ? '2px solid #3b82f6' : '2px solid #e5e7eb', borderRadius: 10, cursor: 'pointer' }}>{h}</button>; })}
-          </div>
-        </div>
-        <button disabled={!canStart} onClick={startTest} style={{ width: '100%', padding: '14px 0', fontSize: 16, fontWeight: 700, background: canStart ? 'linear-gradient(135deg, #3b82f6, #2563eb)' : '#d1d5db', color: '#fff', border: 'none', borderRadius: 12, cursor: canStart ? 'pointer' : 'default' }}>继续 →</button>
-      </div>
-    );
-  }
-
-  // ===== TEST =====
-  if (phase === 'test') {
-    var q = shuffled[currentQ];
-    var dimIndex = DIMENSIONS.findIndex(function(d) { return d.key === q.dim; });
-    return (
-      <div style={{ maxWidth: 600, margin: '0 auto', padding: 24, fontFamily: font }}>
-        <div style={{ marginBottom: 24 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: '#6b7280' }}>{'第 ' + (currentQ + 1) + ' / ' + shuffled.length + ' 题'}</span>
-            <span style={{ fontSize: 13, color: '#9ca3af' }}>{Math.round(progress) + '%'}</span>
-          </div>
-          <ProgressBar value={progress} />
-        </div>
-        <div style={{ background: '#f9fafb', borderRadius: 16, padding: 24, marginBottom: 20, borderLeft: '4px solid ' + dimColors[dimIndex] }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-            <span style={{ fontSize: 16 }}>{DIMENSIONS[dimIndex].icon}</span>
-            <span style={{ fontSize: 12, fontWeight: 600, color: dimColors[dimIndex] }}>{DIMENSIONS[dimIndex].name}</span>
-          </div>
-          <p style={{ fontSize: 16, fontWeight: 600, color: '#1f2937', margin: 0, lineHeight: 1.6 }}>{q.text}</p>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
-          {q.options.map(function(opt, i) {
-            var sel = answers[currentQ] === i;
-            return (
-              <button key={i} onClick={function() { handleAnswer(currentQ, i); }} style={{ padding: '14px 18px', fontSize: 14, fontWeight: sel ? 700 : 500, background: sel ? '#eff6ff' : '#fff', color: sel ? '#2563eb' : '#374151', border: sel ? '2px solid #3b82f6' : '2px solid #e5e7eb', borderRadius: 12, cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s', lineHeight: 1.5 }}>
-                <span style={{ display: 'inline-block', width: 24, fontWeight: 700, color: sel ? '#2563eb' : '#9ca3af' }}>{LABELS_3[i]}</span>{opt}
-              </button>
-            );
-          })}
-        </div>
-        <div style={{ display: 'flex', gap: 12 }}>
-          <button disabled={currentQ === 0} onClick={function() { setCurrentQ(currentQ - 1); }} style={{ flex: 1, padding: '12px 0', fontSize: 14, fontWeight: 600, background: '#f3f4f6', color: currentQ === 0 ? '#d1d5db' : '#374151', border: 'none', borderRadius: 10, cursor: currentQ === 0 ? 'default' : 'pointer' }}>← 上一题</button>
-          {currentQ < shuffled.length - 1 ? (
-            <button disabled={answers[currentQ] === undefined} onClick={function() { setCurrentQ(currentQ + 1); }} style={{ flex: 1, padding: '12px 0', fontSize: 14, fontWeight: 600, background: answers[currentQ] !== undefined ? '#3b82f6' : '#d1d5db', color: '#fff', border: 'none', borderRadius: 10, cursor: answers[currentQ] !== undefined ? 'pointer' : 'default' }}>下一题 →</button>
-          ) : (
-            <button disabled={!allAnswered} onClick={showResult} style={{ flex: 1, padding: '12px 0', fontSize: 14, fontWeight: 700, background: allAnswered ? 'linear-gradient(135deg, #3b82f6, #2563eb)' : '#d1d5db', color: '#fff', border: 'none', borderRadius: 10, cursor: allAnswered ? 'pointer' : 'default' }}>🎯 查看结果</button>
+      )}
+      {sub === 2 && (
+        <div>
+          <Sec title={MONTHS[selMonth] + " 达标分析"}>
+            <G cols={3}>
+              <KPICard label="新增学员" target={targets.newStudents} actual={act.newStudents} unit="人" />
+              <KPICard label="续费率" target={targets.renewRate} actual={actualRR} unit="%" />
+              <KPICard label="流失" target={2} actual={act.lostStudents} unit="人" invert />
+            </G>
+            <div style={{ marginTop: 10 }}><G cols={2}>
+              <KPICard label="私教消课" target={targets.pvtRevenue} actual={act.pvtRevenue} format="money" />
+              <KPICard label="成人小班" target={targets.adultRevenue} actual={act.adultRevenue} format="money" />
+            </G></div>
+            <div style={{ marginTop: 10 }}><G cols={2}>
+              <KPICard label="集训" target={isCamp ? targets.campRevenue : 0} actual={act.campRevenue} format="money" />
+              <KPICard label="球台租赁" target={targets.tableRevenue} actual={act.tableRevenue} format="money" />
+            </G></div>
+            <div style={{ marginTop: 10 }}><G cols={3}>
+              <KPICard label="总收入" target={targetTotal} actual={actualTotal} format="money" />
+              <KPICard label="总成本" target={targets.totalCost} actual={actualCost} format="money" invert />
+              <KPICard label="净利润" target={targetTotal - targets.totalCost} actual={actualProfit} format="money" />
+            </G></div>
+          </Sec>
+          {actualTotal > 0 && (
+            <Sec title="诊断">
+              {(() => {
+                const issues = [];
+                const pvtP = targets.pvtRevenue > 0 ? ((parseFloat(act.pvtRevenue)||0) / targets.pvtRevenue * 100) : 100;
+                const newP = targets.newStudents > 0 ? ((parseFloat(act.newStudents)||0) / targets.newStudents * 100) : 100;
+                const costP = targets.totalCost > 0 ? (actualCost / targets.totalCost * 100) : 100;
+                if (newP < 80) issues.push({ t: `招生完成${Math.round(newP)}%，加强微信推广/转介绍/体验课`, c: C.red });
+                if (actualRR < targets.renewRate && dueRenew > 0) issues.push({ t: `续费率${actualRR}%低于${targets.renewRate}%目标，跟进到期学员`, c: C.red });
+                if (pvtP < 80) issues.push({ t: `私教收入达标${Math.round(pvtP)}%，检查出勤率`, c: C.amber });
+                if (costP > 110) issues.push({ t: `成本超预算${Math.round(costP - 100)}%`, c: C.red });
+                if (issues.length === 0) issues.push({ t: "各项指标达标，继续保持！", c: C.green });
+                return issues.map((iss, i) => <div key={i} style={{ background: iss.c.bg, borderRadius: 6, padding: "8px 10px", marginBottom: 6, fontSize: 13, color: iss.c.tx }}>{iss.t}</div>);
+              })()}
+            </Sec>
           )}
         </div>
-        <div style={{ marginTop: 20, display: 'flex', flexWrap: 'wrap', gap: 5, justifyContent: 'center' }}>
-          {shuffled.map(function(_, i) { return <button key={i} onClick={function() { setCurrentQ(i); }} style={{ width: 26, height: 26, fontSize: 10, fontWeight: 600, borderRadius: 6, border: 'none', cursor: 'pointer', background: i === currentQ ? '#3b82f6' : answers[i] !== undefined ? '#bfdbfe' : '#f3f4f6', color: i === currentQ ? '#fff' : answers[i] !== undefined ? '#1e40af' : '#9ca3af' }}>{i + 1}</button>; })}
-        </div>
-      </div>
-    );
-  }
+      )}
+    </div>
+  );
+}
 
-  // ===== RESULT =====
-  var archetype = getArchetype(scores);
-  var dimEntries = DIMENSIONS.map(function(d) { return { key: d.key, name: d.name, score: scores[d.key] || 0 }; });
-  dimEntries.sort(function(a, b) { return b.score - a.score; });
+// ===== MAIN APP WITH LOCALSTORAGE =====
+const emptyMonth = () => ({ newStudents: "", renewals: "", totalStudents: "", lostStudents: "", pvtRevenue: "", adultRevenue: "", campRevenue: "", tableRevenue: "", coachCost: "", rent: "", misc: "" });
+
+function loadLS(key, fallback) {
+  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
+}
+function saveLS(key, val) {
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+}
+
+export default function App() {
+  const [page, setPage] = useState(0);
+  const pages = [
+    { name: "仪表盘", icon: "◉" },
+    { name: "学员管理", icon: "◎" },
+    { name: "财务模型", icon: "◈" },
+    { name: "KPI追踪", icon: "◆" },
+  ];
+
+  const [students, setStudentsRaw] = useState(() => loadLS("pp_students", [
+    { id: 1, name: "示例-张三", pkgPrice: 2699, remainHrs: 8, freq: 2, type: "active" },
+    { id: 2, name: "示例-李四", pkgPrice: 2199, remainHrs: 2, freq: 1, type: "casual" },
+    { id: 3, name: "示例-王五", pkgPrice: 2699, remainHrs: 10, freq: 3, type: "active" },
+  ]));
+  const setStudents = useCallback((v) => { setStudentsRaw(prev => { const next = typeof v === "function" ? v(prev) : v; saveLS("pp_students", next); return next; }); }, []);
+
+  const [monthData, setMonthDataRaw] = useState(() => loadLS("pp_months", (() => { const d = {}; MONTHS.forEach((_, i) => { d[i] = emptyMonth(); }); return d; })()));
+  const setMonthData = useCallback((v) => { setMonthDataRaw(prev => { const next = typeof v === "function" ? v(prev) : v; saveLS("pp_months", next); return next; }); }, []);
+
+  const [targets, setTargetsRaw] = useState(() => loadLS("pp_targets", { newStudents: 4, renewRate: 80, pvtRevenue: 45000, adultRevenue: 4000, campRevenue: 17000, tableRevenue: 2200, totalCost: 16000 }));
+  const setTargets = useCallback((v) => { setTargetsRaw(prev => { const next = typeof v === "function" ? v(prev) : v; saveLS("pp_targets", next); return next; }); }, []);
 
   return (
-    <div ref={resultRef} style={{ maxWidth: 600, margin: '0 auto', padding: 24, fontFamily: font }}>
-      <div style={{ background: 'linear-gradient(135deg, #1e3a5f, #2563eb)', borderRadius: 20, padding: 32, marginBottom: 24, textAlign: 'center', color: '#fff' }}>
-        <div style={{ fontSize: 56, marginBottom: 8 }}>{archetype.emoji}</div>
-        <div style={{ fontSize: 13, fontWeight: 600, opacity: 0.8, letterSpacing: 2, marginBottom: 4 }}>你的乒乓球打法人格</div>
-        <h2 style={{ fontSize: 28, fontWeight: 800, margin: '0 0 6px' }}>{archetype.name}</h2>
-        <p style={{ fontSize: 14, opacity: 0.85, margin: '0 0 16px', fontStyle: 'italic' }}>{archetype.subtitle}</p>
+    <div style={{ fontFamily: "system-ui, sans-serif", maxWidth: 760, margin: "0 auto" }}>
+      <div style={{ display: "flex", gap: 0, marginBottom: 20, borderBottom: "2px solid #eee" }}>
+        {pages.map((p, i) => (
+          <button key={i} onClick={() => setPage(i)} style={{
+            padding: "10px 16px", fontSize: 14, cursor: "pointer", background: "none", border: "none",
+            borderBottom: page === i ? "2px solid " + C.teal.mid : "2px solid transparent", marginBottom: -2,
+            color: page === i ? C.teal.mid : "#888", fontWeight: page === i ? 500 : 400,
+          }}>{p.icon} {p.name}</button>
+        ))}
       </div>
-      <div style={{ background: '#f0f9ff', borderRadius: 14, padding: 20, marginBottom: 24, border: '1px solid #bfdbfe' }}>
-        <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e40af', margin: '0 0 8px' }}>📝 综合分析</h3>
-        <p style={{ fontSize: 14, color: '#1e3a5f', margin: 0, lineHeight: 1.8 }}>{archetype.summary}</p>
-      </div>
-      <div style={{ background: '#f9fafb', borderRadius: 16, padding: 20, marginBottom: 24, textAlign: 'center' }}>
-        <h3 style={{ fontSize: 15, fontWeight: 700, color: '#374151', margin: '0 0 12px' }}>📊 能力雷达图</h3>
-        <RadarChart scores={scores} />
-      </div>
-      <h3 style={{ fontSize: 15, fontWeight: 700, color: '#374151', margin: '0 0 14px' }}>🔍 分维度详解</h3>
-      {DIMENSIONS.map(function(d, i) {
-        var score = Math.round(scores[d.key] || 0);
-        var pct = score;
-        var descText = pct + '分 — ';
-        if (d.key === 'hand') { descText += pct < 35 ? '你明显偏反手主导，反手是你的主要武器。' : pct > 65 ? '你明显偏正手主导，正手是你的核心威胁。' : '你的正反手使用比较均衡，两面都能发起进攻。'; }
-        else { descText += pct < 30 ? '非常偏向' + d.low + '。' : pct < 45 ? '偏向' + d.low + '。' : pct > 70 ? '非常偏向' + d.high + '。' : pct > 55 ? '偏向' + d.high + '。' : d.low + '和' + d.high + '之间比较均衡。'; }
-        return (
-          <div key={d.key} style={{ background: '#fff', borderRadius: 14, padding: 20, marginBottom: 14, border: '1px solid #e5e7eb', borderLeft: '4px solid ' + dimColors[i] }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 20 }}>{d.icon}</span>
-                <span style={{ fontWeight: 700, fontSize: 15, color: '#1f2937' }}>{d.name}</span>
-              </div>
-              <span style={{ fontWeight: 800, fontSize: 20, color: dimColors[i] }}>{score}</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <span style={{ fontSize: 11, color: '#9ca3af', minWidth: 50, textAlign: 'right' }}>{d.low}</span>
-              <div style={{ flex: 1 }}><ProgressBar value={score} color={dimColors[i]} /></div>
-              <span style={{ fontSize: 11, color: '#9ca3af', minWidth: 50 }}>{d.high}</span>
-            </div>
-            <p style={{ fontSize: 13, color: '#4b5563', margin: '8px 0 0', lineHeight: 1.7 }}>{descText}</p>
-          </div>
-        );
-      })}
-      <div style={{ background: '#fffbeb', borderRadius: 12, padding: 16, marginBottom: 20 }}>
-        <p style={{ fontSize: 13, color: '#92400e', margin: 0, lineHeight: 1.6 }}>⚠️ 本测试仅供参考，不代表专业评估。你的风格会随训练和经验不断演变。</p>
-      </div>
-      <RatingWidget scores={scores} archetype={archetype} profile={profile} />
-      <button onClick={function() { setPhase('intro'); setScores({}); setAnswers({}); setProfile({}); }} style={{ width: '100%', padding: '14px 0', fontSize: 15, fontWeight: 700, background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: 12, cursor: 'pointer' }}>🔄 重新测试</button>
+      {page === 0 && <Dashboard students={students} monthData={monthData} />}
+      {page === 1 && <Students students={students} setStudents={setStudents} />}
+      {page === 2 && <FinModel />}
+      {page === 3 && <KPITracker monthData={monthData} setMonthData={setMonthData} targets={targets} setTargets={setTargets} students={students} />}
     </div>
   );
 }
